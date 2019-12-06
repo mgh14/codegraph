@@ -8,12 +8,10 @@ import org.objectweb.asm.ClassReader;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static com.mgh14.codegraph.util.ClassUtils.getClassAsStream;
-import static com.mgh14.codegraph.util.ClassUtils.identifyOpcode;
+import static com.mgh14.codegraph.util.ClassUtils.*;
 
 /** TODO: Document */
 @Slf4j
@@ -45,21 +43,5 @@ public class MethodTracerApp {
                 log.info("");
               });
         });
-  }
-
-  private static void printClassReaderInformation(ClassReader classReader) {
-
-    log.info("\nClassReader Information:\n--------------------");
-    log.info("Access: " + classReader.getAccess());
-    log.info("Class Name: " + classReader.getClassName());
-    log.info("Super Name: " + classReader.getSuperName());
-    log.info("Interfaces: " + Arrays.asList(classReader.getInterfaces()));
-    log.info("Item count: " + classReader.getItemCount());
-    if (classReader.getItemCount() > 0) {
-      for (int i = 0; i < classReader.getItemCount(); i++) {
-        log.info("\tItem Index: " + classReader.getItem(i));
-      }
-    }
-    log.info("Max String Length: " + classReader.getMaxStringLength());
   }
 }
