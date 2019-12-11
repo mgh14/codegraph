@@ -1,6 +1,6 @@
 package com.mgh14.codegraph.tracer;
 
-import com.mgh14.codegraph.adapter.javap.dto.MethodCall;
+import com.mgh14.codegraph.MethodReference;
 import com.mgh14.codegraph.util.ClassUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -20,7 +20,7 @@ public class MethodVisitorPrinter extends MethodVisitor {
   private static final PrintStream printStream = System.out;
   private static final String END_DELIMITER = " //]";
 
-  private final Map<String, List<MethodCall>> allVisitedMethods;
+  private final Map<String, List<MethodReference>> allVisitedMethods;
   private int currentVisitCodeCalls = 0;
 
   public MethodVisitorPrinter() {
@@ -28,12 +28,12 @@ public class MethodVisitorPrinter extends MethodVisitor {
   }
 
   private MethodVisitorPrinter(
-      final int api, final Map<String, List<MethodCall>> allVisitedMethods) {
+      final int api, final Map<String, List<MethodReference>> allVisitedMethods) {
     super(api);
     this.allVisitedMethods = allVisitedMethods;
   }
 
-  public Map<String, List<MethodCall>> getVisitedMethods() {
+  public Map<String, List<MethodReference>> getVisitedMethods() {
     return allVisitedMethods;
   }
 
@@ -60,7 +60,7 @@ public class MethodVisitorPrinter extends MethodVisitor {
     if (!allVisitedMethods.containsKey(owner)) {
       allVisitedMethods.put(owner, new ArrayList<>());
     }
-    allVisitedMethods.get(owner).add(new MethodCall(opcode, name, desc, itf));
+    allVisitedMethods.get(owner).add(new MethodReference(opcode, name, desc, itf));
   }
 
   @Override

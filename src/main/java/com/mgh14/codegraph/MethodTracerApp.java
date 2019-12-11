@@ -1,8 +1,7 @@
 package com.mgh14.codegraph;
 
-import com.mgh14.codegraph.adapter.javap.dto.MethodCall;
 import com.mgh14.codegraph.tracer.MethodVisitorPrinter;
-import com.mgh14.codegraph.tracer.TraceClassVisitor;
+import com.mgh14.codegraph.tracer.MyTraceClassVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.objectweb.asm.ClassReader;
 
@@ -26,10 +25,10 @@ public class MethodTracerApp {
     printClassReaderInformation(classReader);
 
     log.info("Beginning trace...");
-    final TraceClassVisitor traceVisitor = new TraceClassVisitor(new MethodVisitorPrinter());
+    final MyTraceClassVisitor traceVisitor = new MyTraceClassVisitor(new MethodVisitorPrinter());
     classReader.accept(traceVisitor, ClassReader.EXPAND_FRAMES);
 
-    final Map<String, List<MethodCall>> invoked = traceVisitor.getCalled();
+    final Map<String, List<MethodReference>> invoked = traceVisitor.getCalled();
     log.info("Methods Size: " + invoked.size());
     invoked.forEach(
         (key, value1) -> {

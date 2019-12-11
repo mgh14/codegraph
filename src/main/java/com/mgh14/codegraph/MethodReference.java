@@ -1,9 +1,9 @@
-package com.mgh14.codegraph.adapter.javap.dto;
+package com.mgh14.codegraph;
 
 /**
  * TODO: Document
  */
-public class MethodCall {
+public class MethodReference {
 
     private final int opcode;
     private final String name;
@@ -11,13 +11,13 @@ public class MethodCall {
     private final boolean itf;
     private final Object[] args;
 
-    public MethodCall(final int opcode, final String name, final String desc,
-                      final boolean itf) {
+    public MethodReference(final int opcode, final String name, final String desc,
+                           final boolean itf) {
         this(opcode, name, desc, itf, new Object[]{});
     }
 
-    public MethodCall(final int opcode, final String name, final String desc,
-                      final boolean itf, Object... args) {
+    public MethodReference(final int opcode, final String name, final String desc,
+                           final boolean itf, Object... args) {
         this.opcode = opcode;
         this.name = name;
         this.desc = desc;
