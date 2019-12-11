@@ -1,6 +1,9 @@
 package com.mgh14.codegraph.tracer;
 
-import com.mgh14.codegraph.adapter.javap.dto.MethodCall;
+import com.mgh14.codegraph.MethodReference;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Value;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 
@@ -9,19 +12,18 @@ import java.util.Map;
 
 import static org.objectweb.asm.Opcodes.ASM5;
 
-public class TraceClassVisitor extends ClassVisitor {
+@Value
+@Builder
+@EqualsAndHashCode(callSuper = true)
+public class MyTraceClassVisitor extends ClassVisitor {
 
     private final MethodVisitorPrinter methodVisitorPrinter;
 
-    public TraceClassVisitor(final int api) {
-        this(api, new MethodVisitorPrinter());
-    }
-
-    public TraceClassVisitor(final MethodVisitorPrinter methodVisitorPrinter) {
+    public MyTraceClassVisitor(final MethodVisitorPrinter methodVisitorPrinter) {
         this(ASM5, methodVisitorPrinter);
     }
 
-    public TraceClassVisitor(final int api, final MethodVisitorPrinter methodVisitorPrinter) {
+    public MyTraceClassVisitor(final int api, final MethodVisitorPrinter methodVisitorPrinter) {
         super(api, null);
         this.methodVisitorPrinter = methodVisitorPrinter;
     }
@@ -31,7 +33,7 @@ public class TraceClassVisitor extends ClassVisitor {
         return methodVisitorPrinter;
     }
 
-    public Map<String, List<MethodCall>> getCalled() {
+    public Map<String, List<MethodReference>> getCalled() {
         return methodVisitorPrinter.getVisitedMethods();
     }
 
