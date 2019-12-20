@@ -1,4 +1,4 @@
-package com.mgh14.codegraph;
+package com.mgh14.codegraph.printtracer;
 
 import lombok.Builder;
 import lombok.Value;

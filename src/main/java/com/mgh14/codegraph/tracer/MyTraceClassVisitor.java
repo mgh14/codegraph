@@ -1,6 +1,6 @@
 package com.mgh14.codegraph.tracer;
 
-import com.mgh14.codegraph.PrintMethodReference;
+import com.mgh14.codegraph.printtracer.PrintMethodReference;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Value;

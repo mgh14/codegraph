@@ -1,5 +1,6 @@
-package com.mgh14.codegraph;
+package com.mgh14.codegraph.printtracer;
 
+import com.mgh14.codegraph.ForLookingAtBytesClass;
 import com.mgh14.codegraph.tracer.MethodVisitorPrinter;
 import com.mgh14.codegraph.tracer.MyTraceClassVisitor;
 import lombok.extern.slf4j.Slf4j;

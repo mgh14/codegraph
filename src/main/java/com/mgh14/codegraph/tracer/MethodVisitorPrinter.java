@@ -1,6 +1,6 @@
 package com.mgh14.codegraph.tracer;
 
-import com.mgh14.codegraph.PrintMethodReference;
+import com.mgh14.codegraph.printtracer.PrintMethodReference;
 import com.mgh14.codegraph.util.ClassUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
