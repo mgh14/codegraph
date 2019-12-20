@@ -3,30 +3,32 @@ package com.mgh14.codegraph;
 import com.mgh14.codegraph.util.ClassUtils;
 import lombok.Builder;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static com.mgh14.codegraph.CodeGraphApp.ASM_VERSION;
 
 /** */
+@Slf4j
 public class MMethodVisitor extends MethodVisitor {
 
   @Value
   @Builder
   public static class MethodVisit {
+    String methodId;
     String owner;
     MethodReference thisRef;
     MethodReference parentRef;
     List<MethodVisit> childMethodVisits;
   }
 
-  private static final PrintStream printStream = System.out;
   private static final String END_DELIMITER = " //]";
 
   private final String idOfMethodToVisit;
@@ -48,14 +50,21 @@ public class MMethodVisitor extends MethodVisitor {
 
   @Override
   public void visitCode() {
-    print("VISIT_CODE: Beginning visit to method...", true);
+    log(() -> "VISIT_CODE: Beginning visit to method...", true);
     super.visitCode();
   }
 
   @Override
   public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-    MethodReference currentMethodRef = new MethodReference(opcode, name, desc, itf);
-    MethodVisit currentVisit = MethodVisit.builder().owner(owner).thisRef(currentMethodRef).build();
+    String noLName = name.replace("[L", StringUtils.EMPTY);
+    MethodReference currentMethodRef = new MethodReference(opcode, noLName, desc, itf);
+    MethodVisit currentVisit =
+        MethodVisit.builder()
+            .methodId(idOfMethodToVisit)
+            .owner(owner)
+            .thisRef(currentMethodRef)
+            .childMethodVisits(new ArrayList<>())
+            .build();
     parentClassMethodVisitsByMethodId.get(idOfMethodToVisit).add(currentVisit);
 
     printInsnVisit("VISIT_METHOD_INSN", opcode, owner, name, desc);
@@ -63,7 +72,7 @@ public class MMethodVisitor extends MethodVisitor {
 
   @Override
   public void visitInsn(int opcode) {
-    print(String.format("VISIT_INSN: opcode: %s", ClassUtils.identifyOpcode(opcode)));
+    log(() -> String.format("VISIT_INSN: opcode: %s", ClassUtils.identifyOpcode(opcode)));
   }
 
   @Override
@@ -73,23 +82,25 @@ public class MMethodVisitor extends MethodVisitor {
 
   @Override
   public void visitVarInsn(int opcode, int var) {
-    print(
-        String.format(
-            "VISIT_VAR_INSN: opcode: %s; var: %s", ClassUtils.identifyOpcode(opcode), var));
+    log(
+        () ->
+            String.format(
+                "VISIT_VAR_INSN: opcode: %s; var: %s", ClassUtils.identifyOpcode(opcode), var));
   }
 
   @Override
   public void visitLocalVariable(
       String name, String desc, String signature, Label start, Label end, int index) {
-    print(
-        String.format(
-            "Local variable: name: %s; desc: %s; signature: %s; start: %s; end: %s; index: %d",
-            name, desc, signature, start, end, index));
+    log(
+        () ->
+            String.format(
+                "Local variable: name: %s; desc: %s; signature: %s; start: %s; end: %s; index: %d",
+                name, desc, signature, start, end, index));
   }
 
   @Override
   public void visitEnd() {
-    print("END_VISIT: visit of method ended");
+    log(() -> "END_VISIT: visit of method ended");
     super.visitEnd();
   }
 
@@ -99,18 +110,19 @@ public class MMethodVisitor extends MethodVisitor {
       final String owner,
       final String name,
       final String desc) {
-    print(
-        String.format(
-            "%s: name: %s; Opcode: %s; owner: %s; desc: %s ",
-            prefix, name, ClassUtils.identifyOpcode(opcode), owner, desc));
+    log(
+        () ->
+            String.format(
+                "%s: name: %s; Opcode: %s; owner: %s; desc: %s ",
+                prefix, name, ClassUtils.identifyOpcode(opcode), owner, desc));
   }
 
-  private void print(String s) {
-    print(s, false);
+  private void log(Supplier<String> supplier) {
+    log(supplier, false);
   }
 
-  private void print(String s, boolean requiresIndent) {
+  private void log(Supplier<String> supplier, boolean requiresIndent) {
     String initialIndent = requiresIndent ? "\t" : StringUtils.EMPTY;
-    printStream.println(String.format("%s%s%s", initialIndent, s, END_DELIMITER));
+    log.debug(String.format("%s%s%s", initialIndent, supplier.get(), END_DELIMITER));
   }
 }
