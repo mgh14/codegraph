@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.objectweb.asm.Opcodes.ASM5;
+import static com.mgh14.codegraph.CodeGraphApp.ASM_VERSION;
 
 public class MethodVisitorPrinter extends MethodVisitor {
 
@@ -24,7 +24,7 @@ public class MethodVisitorPrinter extends MethodVisitor {
   private int currentVisitCodeCalls = 0;
 
   public MethodVisitorPrinter() {
-    this(ASM5, new HashMap<>());
+    this(ASM_VERSION, new HashMap<>());
   }
 
   private MethodVisitorPrinter(

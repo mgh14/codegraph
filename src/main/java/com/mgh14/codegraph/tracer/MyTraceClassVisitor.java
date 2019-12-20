@@ -10,7 +10,7 @@ import org.objectweb.asm.MethodVisitor;
 import java.util.List;
 import java.util.Map;
 
-import static org.objectweb.asm.Opcodes.ASM5;
+import static org.objectweb.asm.Opcodes.ASM7;
 
 @Value
 @Builder
@@ -20,7 +20,7 @@ public class MyTraceClassVisitor extends ClassVisitor {
     private final MethodVisitorPrinter methodVisitorPrinter;
 
     public MyTraceClassVisitor(final MethodVisitorPrinter methodVisitorPrinter) {
-        this(ASM5, methodVisitorPrinter);
+        this(ASM7, methodVisitorPrinter);
     }
 
     public MyTraceClassVisitor(final int api, final MethodVisitorPrinter methodVisitorPrinter) {

@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.objectweb.asm.Opcodes.ASM5;
+import static com.mgh14.codegraph.CodeGraphApp.ASM_VERSION;
 
 /** */
 public class MMethodVisitor extends MethodVisitor {
@@ -39,7 +39,7 @@ public class MMethodVisitor extends MethodVisitor {
   // TODO: pass in ClassReference (or something) pointing to parent of this method?
   public MMethodVisitor(
       String idOfMethodToVisit, Map<String, List<MethodVisit>> parentClassMethodVisitsByMethodId) {
-    super(ASM5);
+    super(ASM_VERSION);
     this.idOfMethodToVisit = idOfMethodToVisit;
     this.parentClassMethodVisitsByMethodId = parentClassMethodVisitsByMethodId;
     this.parentClassMethodVisitsByMethodId.computeIfAbsent(
