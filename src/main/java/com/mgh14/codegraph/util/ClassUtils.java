@@ -16,6 +16,10 @@ public class ClassUtils {
     return loadingClass.getResourceAsStream(getInternalName(classToLoad));
   }
 
+  public static String getExternalName(String internalName) {
+      return internalName.replace("/", ".");
+  }
+
   public static String getInternalName(Class<?> clazz) {
     return ("/" + clazz.getName().replace('.', '/') + ".class");
   }
