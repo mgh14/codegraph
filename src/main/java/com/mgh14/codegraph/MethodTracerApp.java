@@ -28,7 +28,7 @@ public class MethodTracerApp {
     final MyTraceClassVisitor traceVisitor = new MyTraceClassVisitor(new MethodVisitorPrinter());
     classReader.accept(traceVisitor, ClassReader.EXPAND_FRAMES);
 
-    final Map<String, List<MethodReference>> invoked = traceVisitor.getCalled();
+    final Map<String, List<PrintMethodReference>> invoked = traceVisitor.getCalled();
     log.info("Methods Size: " + invoked.size());
     invoked.forEach(
         (key, value1) -> {
@@ -38,7 +38,7 @@ public class MethodTracerApp {
                 log.info("\tOpcode: " + identifyOpcode(value.getOpcode()));
                 log.info("\tName: " + value.getName());
                 log.info("\tDesc: " + value.getDesc());
-                log.info("\tItf: " + value.isItf());
+                log.info("\tItf: " + value.isInterface());
                 log.info("");
               });
         });

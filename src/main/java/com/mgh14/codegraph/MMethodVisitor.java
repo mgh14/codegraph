@@ -19,33 +19,25 @@ import static com.mgh14.codegraph.CodeGraphApp.ASM_VERSION;
 @Slf4j
 public class MMethodVisitor extends MethodVisitor {
 
-  @Value
-  @Builder
-  public static class MethodVisit {
-    String methodId;
-    String owner;
-    MethodReference thisRef;
-    MethodReference parentRef;
-    List<MethodVisit> childMethodVisits;
-  }
-
   private static final String END_DELIMITER = " //]";
 
-  private final String idOfMethodToVisit;
+  private final MethodReference methodRefToVisit;
   // Note: while this variable is private and final, it is NOT meant to be immutable; only the
   // reference is meant to be constant. There seems to be no other way of collecting the information
   // garnered in this class while parsing a method other than to give this class a data structure
   // with an exterior handle that can store the information parsed here
-  private final Map<String, List<MMethodVisitor.MethodVisit>> parentClassMethodVisitsByMethodId;
+  private final Map<MethodReference, List<MethodInstructionReference>>
+      parentClassMethodVisitsByMethodId;
 
   // TODO: pass in ClassReference (or something) pointing to parent of this method?
   public MMethodVisitor(
-      String idOfMethodToVisit, Map<String, List<MethodVisit>> parentClassMethodVisitsByMethodId) {
+      MethodReference methodReferenceToVisit,
+      Map<MethodReference, List<MethodInstructionReference>> parentClassMethodVisitsByMethodId) {
     super(ASM_VERSION);
-    this.idOfMethodToVisit = idOfMethodToVisit;
+    this.methodRefToVisit = methodReferenceToVisit;
     this.parentClassMethodVisitsByMethodId = parentClassMethodVisitsByMethodId;
     this.parentClassMethodVisitsByMethodId.computeIfAbsent(
-        idOfMethodToVisit, ignored -> new ArrayList<>());
+        methodReferenceToVisit, ignored -> new ArrayList<>());
   }
 
   @Override
@@ -56,16 +48,17 @@ public class MMethodVisitor extends MethodVisitor {
 
   @Override
   public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-    String noLName = name.replace("[L", StringUtils.EMPTY);
-    MethodReference currentMethodRef = new MethodReference(opcode, noLName, desc, itf);
-    MethodVisit currentVisit =
-        MethodVisit.builder()
-            .methodId(idOfMethodToVisit)
+    //    String noLName = name.replace("[L", StringUtils.EMPTY); // TODO: why was this needed?
+    MethodInstructionReference currentInstructionReference =
+        MethodInstructionReference.builder()
+            .parentRef(methodRefToVisit)
+            .name(name)
             .owner(owner)
-            .thisRef(currentMethodRef)
-            .childMethodVisits(new ArrayList<>())
+            .desc(desc)
+            .opcode(opcode)
+            .isInterface(itf)
             .build();
-    parentClassMethodVisitsByMethodId.get(idOfMethodToVisit).add(currentVisit);
+    parentClassMethodVisitsByMethodId.get(methodRefToVisit).add(currentInstructionReference);
 
     printInsnVisit("VISIT_METHOD_INSN", opcode, owner, name, desc);
   }

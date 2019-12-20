@@ -9,6 +9,6 @@ import java.util.List;
 @Value
 @Builder
 public class MethodReferenceRoot {
-  MethodReference parentReference;
-  List<MethodReference> childReferences;
+  PrintMethodReference parentReference;
+  List<PrintMethodReference> childReferences;
 }

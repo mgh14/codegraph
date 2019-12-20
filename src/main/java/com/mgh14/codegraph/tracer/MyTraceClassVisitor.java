@@ -1,6 +1,6 @@
 package com.mgh14.codegraph.tracer;
 
-import com.mgh14.codegraph.MethodReference;
+import com.mgh14.codegraph.PrintMethodReference;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Value;
@@ -33,7 +33,7 @@ public class MyTraceClassVisitor extends ClassVisitor {
         return methodVisitorPrinter;
     }
 
-    public Map<String, List<MethodReference>> getCalled() {
+    public Map<String, List<PrintMethodReference>> getCalled() {
         return methodVisitorPrinter.getVisitedMethods();
     }
 

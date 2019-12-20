@@ -1,8 +1,6 @@
 package com.mgh14.codegraph;
 
-import com.mgh14.codegraph.filter.CompositeFilter;
-import com.mgh14.codegraph.filter.Filter;
-import com.mgh14.codegraph.filter.JavaUtilFilter;
+import com.mgh14.codegraph.filter.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ClassUtils;
 import org.objectweb.asm.ClassReader;
@@ -10,7 +8,6 @@ import org.objectweb.asm.util.TraceClassVisitor;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -26,20 +23,20 @@ public class CodeGraphApp {
   private static Map<Class<?>, Exception> errors = new HashMap<>();
 
   public static void main(String[] args) throws Exception {
-    Map<String, List<MMethodVisitor.MethodVisit>> analysisResult =
+    Map<MethodReference, List<MethodInstructionReference>> analysisResult =
         analyzeMethodRefs(ForLookingAtBytesClass.class);
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
 
-  public static Map<String, List<MMethodVisitor.MethodVisit>> analyzeMethodRefs(Class<?> clazz)
-      throws IOException, ClassNotFoundException {
+  public static Map<MethodReference, List<MethodInstructionReference>> analyzeMethodRefs(
+      Class<?> clazz) throws ClassNotFoundException {
     return analyzeMethodRefs(
-        clazz, new HashSet<>(), CompositeFilter.ofFilters(new JavaUtilFilter()));
+        clazz, new HashSet<>(), CompositeFilter.ofFilters(new NonObjectFilter()));
   }
 
-  private static Map<String, List<MMethodVisitor.MethodVisit>> analyzeMethodRefs(
+  private static Map<MethodReference, List<MethodInstructionReference>> analyzeMethodRefs(
       Class<?> clazz, Set<Class<?>> visitedClasses, Filter classFilter)
-      throws IOException, ClassNotFoundException {
+      throws ClassNotFoundException {
     log.info(
         "Analyzing class [{}] (classes analyzed so far: [{}])",
         clazz.getName(),
@@ -59,45 +56,42 @@ public class CodeGraphApp {
       return Collections.emptyMap();
     }
 
-    // TODO: since this program takes awhile to run, should we not enable this?
+    // TODO: since this program can take awhile to run, should we not enable this?
     // printClassReaderInformation(classReader);
     String className = classReader.getClassName();
 
+    // visit parent ref (i.e. given Class<?> object)
     log.info("Beginning trace for class [{}]...", className);
     MClassVisitor mClassVisitor = new MClassVisitor(ASM_VERSION, className);
-    TraceClassVisitor traceVisitor =
-        new TraceClassVisitor(mClassVisitor, new PrintWriter("abcd.out"));
+    TraceClassVisitor traceVisitor = new TraceClassVisitor(mClassVisitor, null);
     classReader.accept(traceVisitor, ClassReader.EXPAND_FRAMES);
-
-    // visit parent ref (i.e. given Class<?> object)
-    Map<String, List<MMethodVisitor.MethodVisit>> parentClassMethodVisitsByMethodId =
+    Map<MethodReference, List<MethodInstructionReference>> parentClassMethodVisitsByMethodId =
         mClassVisitor.getReferenced();
     visitedClasses.add(clazz);
     log.info("Finished trace for class [{}]", className);
 
     // compute and visit child refs:
-    Set<MMethodVisitor.MethodVisit> childRefsToVisit =
+    Set<MethodInstructionReference> childRefsToVisit =
         calculateChildRefsToVisit(parentClassMethodVisitsByMethodId);
-    Map<String, List<MMethodVisitor.MethodVisit>> allClassMethodVisitsByMethodId =
+    Map<MethodReference, List<MethodInstructionReference>> allClassMethodVisitsByMethodId =
         new HashMap<>(parentClassMethodVisitsByMethodId);
-    for (MMethodVisitor.MethodVisit methodVisit : childRefsToVisit) {
-      String classExternalName = getExternalName(methodVisit.getOwner());
+    for (MethodInstructionReference methodInstructionReference : childRefsToVisit) {
+      String classExternalName = getExternalName(methodInstructionReference.getOwner());
       log.debug(
           "Checking if class [{}] has been visited and/or is not filtered out...",
           classExternalName);
       if (!classIsVisited(classExternalName, visitedClasses)
-          && !classFilter.filterOutClass(classExternalName)) {
+          && (Objects.isNull(classFilter) || !classFilter.filterOutClass(classExternalName))) {
         log.debug("Class [{}] will be visited.", classExternalName);
-        Map<String, List<MMethodVisitor.MethodVisit>> childVisitResults =
+        Map<MethodReference, List<MethodInstructionReference>> childVisitResults =
             analyzeMethodRefs(ClassUtils.getClass(classExternalName), visitedClasses, classFilter);
-        for (Map.Entry<String, List<MMethodVisitor.MethodVisit>> childVisitResult :
+        for (Map.Entry<MethodReference, List<MethodInstructionReference>> childVisitResult :
             childVisitResults.entrySet()) {
           allClassMethodVisitsByMethodId.putIfAbsent(
               childVisitResult.getKey(), childVisitResult.getValue());
         }
       }
     }
-    int x = 5; // TODO: temporary stopping point for debugging; needs removed
     return allClassMethodVisitsByMethodId;
   }
 
@@ -107,8 +101,8 @@ public class CodeGraphApp {
         .anyMatch(s -> Objects.equals(className, s));
   }
 
-  private static Set<MMethodVisitor.MethodVisit> calculateChildRefsToVisit(
-      Map<String, List<MMethodVisitor.MethodVisit>> parentClassMethodVisitsByMethodId) {
+  private static Set<MethodInstructionReference> calculateChildRefsToVisit(
+      Map<MethodReference, List<MethodInstructionReference>> parentClassMethodVisitsByMethodId) {
     return parentClassMethodVisitsByMethodId.entrySet().stream()
         .flatMap(entry -> entry.getValue().stream())
         .collect(Collectors.toSet());
