@@ -21,7 +21,11 @@ public class ClassUtils {
   }
 
   public static String getInternalName(Class<?> clazz) {
-    return ("/" + clazz.getName().replace('.', '/') + ".class");
+    return "/" + getInternalNameWithoutClass(clazz) + ".class";
+  }
+
+  public static String getInternalNameWithoutClass(Class<?> clazz) {
+      return clazz.getName().replace('.', '/');
   }
 
   public static String identifyOpcode(int opcode) {

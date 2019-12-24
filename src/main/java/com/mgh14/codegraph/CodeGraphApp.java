@@ -1,6 +1,7 @@
 package com.mgh14.codegraph;
 
 import com.mgh14.codegraph.filter.*;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ClassUtils;
 import org.objectweb.asm.ClassReader;
@@ -11,6 +12,7 @@ import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.mgh14.codegraph.util.ClassUtils.*;
 import static com.mgh14.codegraph.util.ClassUtils.getClassAsStream;
 import static com.mgh14.codegraph.util.ClassUtils.getExternalName;
 import static org.objectweb.asm.Opcodes.ASM7;
@@ -23,9 +25,89 @@ public class CodeGraphApp {
   private static Map<Class<?>, Exception> errors = new HashMap<>();
 
   public static void main(String[] args) throws Exception {
-    Map<MethodReference, List<MethodInstructionReference>> analysisResult =
-        analyzeMethodRefs(ForLookingAtBytesClass.class);
+    Class<?> clazz = ForLookingAtBytesClass.class;
+    Map<MethodReference, CallTreeNode> allCallGraphs = getAllCallGraphs(clazz);
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
+  }
+
+  @Value
+  public static class CallTreeNode {
+    MethodReference parentMethodReference;
+    MethodInstructionReference methodInstructionReference;
+    List<CallTreeNode> children;
+  }
+
+  // TODO: this method is not complete. Right now it only gathers the children for the root method
+  // references.
+  public static Map<MethodReference, CallTreeNode> getAllCallGraphs(Class<?> clazz)
+      throws ClassNotFoundException {
+    Map<MethodReference, List<MethodInstructionReference>> analysisResult =
+        analyzeMethodRefs(clazz);
+
+    //      Map<String, List<MethodReference>> methodRefsByClass2 =
+    // analysisResult.keySet().stream().collect(Collectors.groupingBy((entry ->
+    // entry.getParentClass())));
+
+    Set<String> parentClasses =
+        analysisResult.keySet().stream().map(mr -> mr.getParentClass()).collect(Collectors.toSet());
+    Map<String, Map<MethodReference, List<MethodInstructionReference>>> methodRefsByClass =
+        new HashMap<>();
+    parentClasses.forEach(
+        parentClass ->
+            methodRefsByClass.put(
+                parentClass,
+                analysisResult.entrySet().stream()
+                    .filter(entry -> entry.getKey().getParentClass().equals(parentClass))
+                    .collect(
+                        Collectors.toMap(entry -> entry.getKey(), entry -> entry.getValue()))));
+
+    String internalClassName = getInternalNameWithoutClass(clazz);
+    Map<MethodReference, CallTreeNode> startingFromAnyMethodCallTree = new HashMap<>();
+    Map<MethodReference, List<MethodInstructionReference>> chosenClassMethods =
+        methodRefsByClass.get(internalClassName);
+    // For each root-level method in the analyzed class:
+    for (MethodReference analyzedClassMethodRef : chosenClassMethods.keySet()) {
+      MethodReference parentMethodReference = analyzedClassMethodRef;
+      List<MethodInstructionReference> mIrs = chosenClassMethods.get(parentMethodReference);
+      if (!startingFromAnyMethodCallTree.containsKey(parentMethodReference)) {
+        // Since this is a root node (i.e. a method in the targeted/analyzed class, there is no
+        // parent method and thus no method instruction. This is one of the class "entry points"
+        CallTreeNode analyzedMethodEntryPoint = new CallTreeNode(null, null, new ArrayList<>());
+        startingFromAnyMethodCallTree.put(parentMethodReference, analyzedMethodEntryPoint);
+      }
+      // For each method instruction inside of the root-level method (of the analyzed class):
+      for (MethodInstructionReference instructionRef : mIrs) {
+        // Find the method reference referred to by the current instruction reference from the list
+        // of all method refs by class above:
+        // TODO: refactor finding the MethodReference (based on a MethodInstructionReference) into a
+        // separate method
+        Map<MethodReference, List<MethodInstructionReference>> methodRefsOfOneClass =
+            methodRefsByClass.get(instructionRef.getOwner());
+        if (methodRefsOfOneClass == null) {
+          // TODO: best way to represent this case?
+          continue;
+        }
+        MethodReference childMethodRef =
+            methodRefsByClass.get(instructionRef.getOwner()).keySet().stream()
+                .filter(key -> instructionMatchesMethodSignature(instructionRef, key))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No match found!"));
+        if (!startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
+          startingFromAnyMethodCallTree.put(
+              childMethodRef,
+              new CallTreeNode(parentMethodReference, instructionRef, new ArrayList<>()));
+        }
+
+        CallTreeNode callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
+        CallTreeNode callTreeChildNode = startingFromAnyMethodCallTree.get(childMethodRef);
+        List<CallTreeNode> nodeChildren = callTreeNode.getChildren();
+        if (!nodeChildren.contains(callTreeChildNode)) {
+          nodeChildren.add(callTreeChildNode);
+        }
+      }
+    }
+
+    return startingFromAnyMethodCallTree;
   }
 
   public static Map<MethodReference, List<MethodInstructionReference>> analyzeMethodRefs(
@@ -93,6 +175,11 @@ public class CodeGraphApp {
       }
     }
     return allClassMethodVisitsByMethodId;
+  }
+
+  private static boolean instructionMatchesMethodSignature(
+      MethodInstructionReference mir, MethodReference ms) {
+    return mir.getDesc().equals(ms.getDesc()) && mir.getName().equals(ms.getName());
   }
 
   private static boolean classIsVisited(String className, Set<Class<?>> visitedClasses) {
