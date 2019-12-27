@@ -34,8 +34,8 @@ public class CodeGraphApp {
   // TODO: not private right now so it can be testable
   public static class CallTreeNode {
     String owner;
-    MethodReference parentMethodReference;
-    MethodInstructionReference methodInstructionReference;
+    MethodReference referenceToMethodThatCallsThisMethod;
+    MethodInstructionReference referringMethodInstruction;
     List<CallTreeNode> children;
   }
 
