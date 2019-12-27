@@ -26,7 +26,8 @@ public class CodeGraphApp {
 
   public static void main(String[] args) throws Exception {
     Class<?> classToAnalyze = ForLookingAtBytesClass.class;
-    Map<String, CallTreeNodeDetail> allCallGraphs = getAllCallGraphs(classToAnalyze);
+    Map<String, CallTreeNodeDetail> allCallGraphsOneChildDeep =
+        getAllCallGraphsOneChildDeep(classToAnalyze);
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
 
@@ -50,7 +51,7 @@ public class CodeGraphApp {
   // TODO: this method is not complete. Right now it only gathers the children for the root method
   // references.
   // TODO: not private right now so it can be testable
-  static Map<String, CallTreeNodeDetail> getAllCallGraphs(Class<?> clazz)
+  static Map<String, CallTreeNodeDetail> getAllCallGraphsOneChildDeep(Class<?> clazz)
       throws ClassNotFoundException {
     Map<MethodReference, List<MethodInstructionReference>> analysisResult =
         analyzeMethodRefs(clazz).getAllMethodRefs();
