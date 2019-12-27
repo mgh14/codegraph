@@ -26,23 +26,31 @@ public class CodeGraphApp {
 
   public static void main(String[] args) throws Exception {
     Class<?> classToAnalyze = ForLookingAtBytesClass.class;
-    Map<MethodReference, CallTreeNode> allCallGraphs = getAllCallGraphs(classToAnalyze);
+    Map<String, CallTreeNodeDetail> allCallGraphs = getAllCallGraphs(classToAnalyze);
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
 
   @Value
-  // TODO: not private right now so it can be testable
-  public static class CallTreeNode {
+  private static class CallTreeNode {
     String owner;
     MethodReference referenceToMethodThatCallsThisMethod;
     MethodInstructionReference referringMethodInstruction;
     List<CallTreeNode> children;
   }
 
+  @Value
+  public static class CallTreeNodeDetail {
+    String owner;
+    MethodReference referenceToMethodThatCallsThisMethod;
+    MethodInstructionReference referringMethodInstruction;
+    List<CallTreeNode> children;
+    MethodReference thisMethodReference;
+  }
+
   // TODO: this method is not complete. Right now it only gathers the children for the root method
   // references.
   // TODO: not private right now so it can be testable
-  static Map<MethodReference, CallTreeNode> getAllCallGraphs(Class<?> clazz)
+  static Map<String, CallTreeNodeDetail> getAllCallGraphs(Class<?> clazz)
       throws ClassNotFoundException {
     Map<MethodReference, List<MethodInstructionReference>> analysisResult =
         analyzeMethodRefs(clazz).getAllMethodRefs();
@@ -112,12 +120,27 @@ public class CodeGraphApp {
       }
     }
 
-    return startingFromAnyMethodCallTree;
+    Map<String, CallTreeNodeDetail> transformedStartingFromAnyMethodCallTree =
+        startingFromAnyMethodCallTree.keySet().stream()
+            .collect(
+                Collectors.toMap(
+                    MethodReference::toString,
+                    key ->
+                        new CallTreeNodeDetail(
+                            startingFromAnyMethodCallTree.get(key).getOwner(),
+                            startingFromAnyMethodCallTree
+                                .get(key)
+                                .getReferenceToMethodThatCallsThisMethod(),
+                            startingFromAnyMethodCallTree.get(key).getReferringMethodInstruction(),
+                            startingFromAnyMethodCallTree.get(key).getChildren(),
+                            key)));
+    return transformedStartingFromAnyMethodCallTree;
   }
 
   @Value
   public static class MethodsAnalysis {
-    Set<MethodReference> rootMethodRefs;    // i.e. the methods from the analyzed class, the roots of the call tree
+    Set<MethodReference>
+        rootMethodRefs; // i.e. the methods from the analyzed class, the roots of the call tree
     Map<MethodReference, List<MethodInstructionReference>> allMethodRefs;
   }
 

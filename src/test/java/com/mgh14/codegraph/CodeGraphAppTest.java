@@ -17,32 +17,33 @@ class CodeGraphAppTest {
 
   @Test
   void getAllCallGraphs_successResult() throws ClassNotFoundException {
-    Map<MethodReference, CodeGraphApp.CallTreeNode> result =
-        CodeGraphApp.getAllCallGraphs(TEST_CLASS);
+    Map<String, CodeGraphApp.CallTreeNodeDetail> result = CodeGraphApp.getAllCallGraphs(TEST_CLASS);
 
     assertThat(result.entrySet(), hasSize(7));
     // TODO: these aren't great test assertions, but MVP takes priority right now:
     Set<String> methodOwners =
-        result.keySet().stream().map(MethodReference::getParentClass).collect(Collectors.toSet());
+        result.values().stream()
+            .map(node -> node.getThisMethodReference().getParentClass())
+            .collect(Collectors.toSet());
     assertThat(
         methodOwners,
         org.hamcrest.Matchers.containsInAnyOrder(
             "com/mgh14/codegraph/ForLookingAtBytesClass", "java/lang/Object"));
     Set<String> valueMethodOwners =
         result.values().stream()
-            .map(CodeGraphApp.CallTreeNode::getOwner)
+            .map(CodeGraphApp.CallTreeNodeDetail::getOwner)
             .collect(Collectors.toSet());
     assertThat(valueMethodOwners, hasSize(1));
     assertThat(valueMethodOwners, hasItem("com/mgh14/codegraph/ForLookingAtBytesClass"));
-    Set<CodeGraphApp.CallTreeNode> nodesWithAnyChildren =
+    Set<CodeGraphApp.CallTreeNodeDetail> nodesWithAnyChildren =
         result.values().stream()
             .filter(node -> node.getChildren().size() > 0)
             .collect(Collectors.toSet());
-    Set<CodeGraphApp.CallTreeNode> nodesWithTwoOrMoreChildren =
+    Set<CodeGraphApp.CallTreeNodeDetail> nodesWithTwoOrMoreChildren =
         result.values().stream()
             .filter(node -> node.getChildren().size() > 1)
             .collect(Collectors.toSet());
-    Set<CodeGraphApp.CallTreeNode> nodesWithThreeOrMoreChildren =
+    Set<CodeGraphApp.CallTreeNodeDetail> nodesWithThreeOrMoreChildren =
         result.values().stream()
             .filter(node -> node.getChildren().size() > 2)
             .collect(Collectors.toSet());
