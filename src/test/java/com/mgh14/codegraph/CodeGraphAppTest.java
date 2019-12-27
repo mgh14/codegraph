@@ -10,14 +10,14 @@ import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 
-/** */
 class CodeGraphAppTest {
 
   private static final Class<?> TEST_CLASS = ForLookingAtBytesClass.class;
 
   @Test
   void getAllCallGraphs_successResult() throws ClassNotFoundException {
-    Map<String, CodeGraphApp.CallTreeNodeDetail> result = CodeGraphApp.getAllCallGraphsOneChildDeep(TEST_CLASS);
+    Map<String, CodeGraphApp.CallTreeNodeDetail> result =
+        CodeGraphApp.getAllCallGraphsOneChildDeep(TEST_CLASS);
 
     assertThat(result.entrySet(), hasSize(7));
     // TODO: these aren't great test assertions, but MVP takes priority right now:
