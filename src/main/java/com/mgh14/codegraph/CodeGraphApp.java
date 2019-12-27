@@ -25,13 +25,15 @@ public class CodeGraphApp {
   private static Map<Class<?>, Exception> errors = new HashMap<>();
 
   public static void main(String[] args) throws Exception {
-    Class<?> clazz = ForLookingAtBytesClass.class;
-    Map<MethodReference, CallTreeNode> allCallGraphs = getAllCallGraphs(clazz);
+    Class<?> classToAnalyze = ForLookingAtBytesClass.class;
+    Map<MethodReference, CallTreeNode> allCallGraphs = getAllCallGraphs(classToAnalyze);
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
 
   @Value
+  // TODO: not private right now so it can be testable
   public static class CallTreeNode {
+    String owner;
     MethodReference parentMethodReference;
     MethodInstructionReference methodInstructionReference;
     List<CallTreeNode> children;
@@ -39,10 +41,11 @@ public class CodeGraphApp {
 
   // TODO: this method is not complete. Right now it only gathers the children for the root method
   // references.
-  public static Map<MethodReference, CallTreeNode> getAllCallGraphs(Class<?> clazz)
+  // TODO: not private right now so it can be testable
+  static Map<MethodReference, CallTreeNode> getAllCallGraphs(Class<?> clazz)
       throws ClassNotFoundException {
     Map<MethodReference, List<MethodInstructionReference>> analysisResult =
-        analyzeMethodRefs(clazz);
+        analyzeMethodRefs(clazz).getAllMethodRefs();
 
     //      Map<String, List<MethodReference>> methodRefsByClass2 =
     // analysisResult.keySet().stream().collect(Collectors.groupingBy((entry ->
@@ -72,7 +75,8 @@ public class CodeGraphApp {
       if (!startingFromAnyMethodCallTree.containsKey(parentMethodReference)) {
         // Since this is a root node (i.e. a method in the targeted/analyzed class, there is no
         // parent method and thus no method instruction. This is one of the class "entry points"
-        CallTreeNode analyzedMethodEntryPoint = new CallTreeNode(null, null, new ArrayList<>());
+        CallTreeNode analyzedMethodEntryPoint =
+            new CallTreeNode(internalClassName, null, null, new ArrayList<>());
         startingFromAnyMethodCallTree.put(parentMethodReference, analyzedMethodEntryPoint);
       }
       // For each method instruction inside of the root-level method (of the analyzed class):
@@ -95,7 +99,8 @@ public class CodeGraphApp {
         if (!startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
           startingFromAnyMethodCallTree.put(
               childMethodRef,
-              new CallTreeNode(parentMethodReference, instructionRef, new ArrayList<>()));
+              new CallTreeNode(
+                  internalClassName, parentMethodReference, instructionRef, new ArrayList<>()));
         }
 
         CallTreeNode callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
@@ -110,22 +115,29 @@ public class CodeGraphApp {
     return startingFromAnyMethodCallTree;
   }
 
-  public static Map<MethodReference, List<MethodInstructionReference>> analyzeMethodRefs(
-      Class<?> clazz) throws ClassNotFoundException {
-    return analyzeMethodRefs(
+  @Value
+  public static class MethodsAnalysis {
+    Set<MethodReference> rootMethodRefs;    // i.e. the methods from the analyzed class, the roots of the call tree
+    Map<MethodReference, List<MethodInstructionReference>> allMethodRefs;
+  }
+
+  public static MethodsAnalysis analyzeMethodRefs(Class<?> clazz) throws ClassNotFoundException {
+    return recursiveAnalyzeMethodRefs(
         clazz, new HashSet<>(), CompositeFilter.ofFilters(new NonObjectFilter()));
   }
 
-  private static Map<MethodReference, List<MethodInstructionReference>> analyzeMethodRefs(
+  private static MethodsAnalysis recursiveAnalyzeMethodRefs(
       Class<?> clazz, Set<Class<?>> visitedClasses, Filter classFilter)
       throws ClassNotFoundException {
     log.info(
         "Analyzing class [{}] (classes analyzed so far: [{}])",
         clazz.getName(),
         visitedClasses.size());
+
+    // checking pre-conditions:
     if (visitedClasses.contains(clazz)) {
       log.info("Class [{}] analysis already done. Returning empty...", clazz.getName());
-      return Collections.emptyMap();
+      return new MethodsAnalysis(Collections.emptySet(), Collections.emptyMap());
     }
     InputStream in = getClassAsStream(CodeGraphApp.class, clazz);
     ClassReader classReader;
@@ -135,7 +147,7 @@ public class CodeGraphApp {
       log.error("Class not found: {}", clazz.getName(), e);
       errors.put(clazz, e);
       visitedClasses.add(clazz);
-      return Collections.emptyMap();
+      return new MethodsAnalysis(Collections.emptySet(), Collections.emptyMap());
     }
 
     // TODO: since this program can take awhile to run, should we not enable this?
@@ -155,7 +167,7 @@ public class CodeGraphApp {
     // compute and visit child refs:
     Set<MethodInstructionReference> childRefsToVisit =
         calculateChildRefsToVisit(parentClassMethodVisitsByMethodId);
-    Map<MethodReference, List<MethodInstructionReference>> allClassMethodVisitsByMethodId =
+    Map<MethodReference, List<MethodInstructionReference>> allClassMethodVisitsByMethodReference =
         new HashMap<>(parentClassMethodVisitsByMethodId);
     for (MethodInstructionReference methodInstructionReference : childRefsToVisit) {
       String classExternalName = getExternalName(methodInstructionReference.getOwner());
@@ -165,16 +177,17 @@ public class CodeGraphApp {
       if (!classIsVisited(classExternalName, visitedClasses)
           && (Objects.isNull(classFilter) || !classFilter.filterOutClass(classExternalName))) {
         log.debug("Class [{}] will be visited.", classExternalName);
-        Map<MethodReference, List<MethodInstructionReference>> childVisitResults =
-            analyzeMethodRefs(ClassUtils.getClass(classExternalName), visitedClasses, classFilter);
+        MethodsAnalysis childVisitResults =
+            recursiveAnalyzeMethodRefs(
+                ClassUtils.getClass(classExternalName), visitedClasses, classFilter);
         for (Map.Entry<MethodReference, List<MethodInstructionReference>> childVisitResult :
-            childVisitResults.entrySet()) {
-          allClassMethodVisitsByMethodId.putIfAbsent(
+            childVisitResults.getAllMethodRefs().entrySet()) {
+          allClassMethodVisitsByMethodReference.putIfAbsent(
               childVisitResult.getKey(), childVisitResult.getValue());
         }
       }
     }
-    return allClassMethodVisitsByMethodId;
+    return new MethodsAnalysis(null, allClassMethodVisitsByMethodReference);
   }
 
   private static boolean instructionMatchesMethodSignature(
