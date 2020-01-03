@@ -6,6 +6,7 @@ import com.mgh14.codegraph.filter.NonObjectFilter;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ClassUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.util.TraceClassVisitor;
 
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.mgh14.codegraph.util.ClassUtils.*;
 import static org.objectweb.asm.Opcodes.ASM7;
@@ -29,7 +31,81 @@ public class CodeGraphApp {
     Map<String, CallTreeNodeDetail> allCallGraphsOneChildDeep =
         getAllCallGraphsOneChildDeep(classToAnalyze);
     // now we need to piece together all the call graphs that are only one child deep right now:
+    Set<String> unprocessedNodeKeys = new HashSet<>(allCallGraphsOneChildDeep.keySet());
+    Collection<CallTreeNodeDetail> allRefs = allCallGraphsOneChildDeep.values();
+    Set<String> leafCallTreeNodeKeys =
+        allCallGraphsOneChildDeep.entrySet().stream()
+            .filter(entry -> entry.getValue().getChildren().isEmpty())
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toSet());
+    for (String callTreeNodeKey : leafCallTreeNodeKeys) {
+      CallTreeNodeDetail currentLeafNode = allCallGraphsOneChildDeep.get(callTreeNodeKey);
+      MethodReference mr = currentLeafNode.getReferenceToMethodThatCallsThisMethod();
+      if (Objects.isNull(mr)) {
+        // this is both a leaf node and the root of a graph that calls no other methods in the
+        // root/analyzed class; processing for this method is done
+        unprocessedNodeKeys.remove(currentLeafNode.getThisMethodReference().toString());
+        continue;
+      }
+      Set<CallTreeNodeDetail> nodesWithMethodRefMatchingLeafReferringMethodInstruction =
+          allRefs.stream()
+              .filter(ref -> ref.getThisMethodReference().equals(mr))
+              .collect(Collectors.toSet());
+      if (nodesWithMethodRefMatchingLeafReferringMethodInstruction.size() != 1) {
+        throw new RuntimeException(
+            "Illegal state! No single call tree node found for method ref {" + mr + "}");
+      }
+      CallTreeNodeDetail nodeCallingLeafViaMethodInstructionReference =
+          nodesWithMethodRefMatchingLeafReferringMethodInstruction.iterator().next();
+      if (nodeCallingLeafViaMethodInstructionReference.getThisMethodReference().equals(currentLeafNode.getThisMethodReference())) {
+          CallTreeNodeDetail circularNodeReference = new CallTreeNodeDetail(currentLeafNode.getOwner(), currentLeafNode.getReferenceToMethodThatCallsThisMethod(), currentLeafNode.getReferringMethodInstruction(), new ArrayList<>(0), currentLeafNode.getThisMethodReference());
+          nodeCallingLeafViaMethodInstructionReference.getChildren().add(circularNodeReference);
+      }
+      else if (!nodeCallingLeafViaMethodInstructionReference.getChildren().contains(currentLeafNode)) {
+        nodeCallingLeafViaMethodInstructionReference.getChildren().add(currentLeafNode);
+      }
+      else {
+          log.debug(""); // TODO: what to put here?
+      }
+    }
+
+    String analyzedClassName = getInternalNameWithoutClass(classToAnalyze);
+    Map<String, CallTreeNodeDetail> analyzedClassGraphs =
+        allCallGraphsOneChildDeep.entrySet().stream()
+            .filter(
+                ref ->
+                    ref.getValue()
+                        .getThisMethodReference()
+                        .getParentClass()
+                        .equals(analyzedClassName))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    log.info(String.format("Finished analysis of class [%s]. Outputting method graphs...", analyzedClassName));
+    for (CallTreeNodeDetail methodGraph : analyzedClassGraphs.values()) {
+      outputGraph(methodGraph, 0);
+    }
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
+  }
+
+  private static void outputGraph(CallTreeNodeDetail node, int level) {
+    String methodRefName =
+        node.getOwner()
+            + "#"
+            + node.getThisMethodReference().getName()
+            + String.format(
+                " (method hash: %s, children = %d)",
+                node.getThisMethodReference().hashCode(), node.getChildren().size());
+    if (level == 0) {
+      log.info("Root Method: " + methodRefName);
+    } else {
+      String indent =
+          IntStream.rangeClosed(0, level)
+              .mapToObj(i -> "\t")
+              .collect(Collectors.joining(StringUtils.EMPTY));
+      log.info(indent + "NR: " + methodRefName);
+    }
+    for (CallTreeNodeDetail child : node.getChildren()) {
+      outputGraph(child, level + 1);
+    }
   }
 
   @Value
@@ -101,7 +177,7 @@ public class CodeGraphApp {
                 .filter(key -> instructionMatchesMethodSignature(instructionRef, key))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("No match found!"));
-        if (!startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
+        if (!childMethodRef.equals(parentMethodReference) && !startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
           startingFromAnyMethodCallTree.put(
               childMethodRef,
               new CallTreeNodeDetail(
@@ -115,7 +191,7 @@ public class CodeGraphApp {
         CallTreeNodeDetail callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
         CallTreeNodeDetail callTreeChildNode = startingFromAnyMethodCallTree.get(childMethodRef);
         List<CallTreeNodeDetail> nodeChildren = callTreeNode.getChildren();
-        if (!nodeChildren.contains(callTreeChildNode)) {
+        if (!childMethodRef.equals(parentMethodReference) && !nodeChildren.contains(callTreeChildNode)) {
           nodeChildren.add(callTreeChildNode);
         }
       }
@@ -200,13 +276,19 @@ public class CodeGraphApp {
               childVisitResult.getKey(), childVisitResult.getValue());
         }
       }
+      else {
+          log.debug("Class [{}] has already been visited.", classExternalName);
+      }
     }
     return new MethodsAnalysis(null, allClassMethodVisitsByMethodReference);
   }
 
   private static boolean instructionMatchesMethodSignature(
-      MethodInstructionReference mir, MethodReference ms) {
-    return mir.getDesc().equals(ms.getDesc()) && mir.getName().equals(ms.getName());
+      MethodInstructionReference methodInsRef, MethodReference methodRef) {
+    return Objects.nonNull(methodInsRef)
+        && methodInsRef.getOwner().equals(methodRef.getParentClass())
+        && methodInsRef.getDesc().equals(methodRef.getDesc())
+        && methodInsRef.getName().equals(methodRef.getName());
   }
 
   private static boolean classIsVisited(String className, Set<Class<?>> visitedClasses) {
