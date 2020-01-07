@@ -10,8 +10,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.util.TraceClassVisitor;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -27,7 +31,7 @@ public class CodeGraphApp {
   private static Map<Class<?>, Exception> errors = new HashMap<>();
 
   public static void main(String[] args) throws Exception {
-    Class<?> classToAnalyze = ForLookingAtBytesClass.class;
+    Class<?> classToAnalyze = loadClass(args[1], args[2]);
     Map<String, CallTreeNodeDetail> allCallGraphsOneChildDeep =
         getAllCallGraphsOneChildDeep(classToAnalyze);
     // now we need to piece together all the call graphs that are only one child deep right now:
@@ -57,15 +61,23 @@ public class CodeGraphApp {
       }
       CallTreeNodeDetail nodeCallingLeafViaMethodInstructionReference =
           nodesWithMethodRefMatchingLeafReferringMethodInstruction.iterator().next();
-      if (nodeCallingLeafViaMethodInstructionReference.getThisMethodReference().equals(currentLeafNode.getThisMethodReference())) {
-          CallTreeNodeDetail circularNodeReference = new CallTreeNodeDetail(currentLeafNode.getOwner(), currentLeafNode.getReferenceToMethodThatCallsThisMethod(), currentLeafNode.getReferringMethodInstruction(), new ArrayList<>(0), currentLeafNode.getThisMethodReference());
-          nodeCallingLeafViaMethodInstructionReference.getChildren().add(circularNodeReference);
-      }
-      else if (!nodeCallingLeafViaMethodInstructionReference.getChildren().contains(currentLeafNode)) {
+      if (nodeCallingLeafViaMethodInstructionReference
+          .getThisMethodReference()
+          .equals(currentLeafNode.getThisMethodReference())) {
+        CallTreeNodeDetail circularNodeReference =
+            new CallTreeNodeDetail(
+                currentLeafNode.getOwner(),
+                currentLeafNode.getReferenceToMethodThatCallsThisMethod(),
+                currentLeafNode.getReferringMethodInstruction(),
+                new ArrayList<>(0),
+                currentLeafNode.getThisMethodReference());
+        nodeCallingLeafViaMethodInstructionReference.getChildren().add(circularNodeReference);
+      } else if (!nodeCallingLeafViaMethodInstructionReference
+          .getChildren()
+          .contains(currentLeafNode)) {
         nodeCallingLeafViaMethodInstructionReference.getChildren().add(currentLeafNode);
-      }
-      else {
-          log.debug(""); // TODO: what to put here?
+      } else {
+        log.debug(""); // TODO: what to put here?
       }
     }
 
@@ -79,12 +91,25 @@ public class CodeGraphApp {
                         .getParentClass()
                         .equals(analyzedClassName))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    log.info(String.format("Finished analysis of class [%s]. Outputting method graphs...", analyzedClassName));
+    log.info(
+        String.format(
+            "Finished analysis of class [%s]. Outputting method graphs...", analyzedClassName));
     for (CallTreeNodeDetail methodGraph : analyzedClassGraphs.values()) {
       outputGraph(methodGraph, 0);
     }
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
+
+    private static Class<?> loadClass(String pathToJar, String fullClassName)
+            throws MalformedURLException, ClassNotFoundException {
+        File file = new File(pathToJar);
+
+        URL url = file.toURI().toURL();
+        URL[] urls = new URL[] {url};
+
+        ClassLoader cl = new URLClassLoader(urls);
+        return cl.loadClass(fullClassName);
+    }
 
   private static void outputGraph(CallTreeNodeDetail node, int level) {
     String methodRefName =
@@ -177,7 +202,8 @@ public class CodeGraphApp {
                 .filter(key -> instructionMatchesMethodSignature(instructionRef, key))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("No match found!"));
-        if (!childMethodRef.equals(parentMethodReference) && !startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
+        if (!childMethodRef.equals(parentMethodReference)
+            && !startingFromAnyMethodCallTree.containsKey(childMethodRef)) {
           startingFromAnyMethodCallTree.put(
               childMethodRef,
               new CallTreeNodeDetail(
@@ -191,7 +217,8 @@ public class CodeGraphApp {
         CallTreeNodeDetail callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
         CallTreeNodeDetail callTreeChildNode = startingFromAnyMethodCallTree.get(childMethodRef);
         List<CallTreeNodeDetail> nodeChildren = callTreeNode.getChildren();
-        if (!childMethodRef.equals(parentMethodReference) && !nodeChildren.contains(callTreeChildNode)) {
+        if (!childMethodRef.equals(parentMethodReference)
+            && !nodeChildren.contains(callTreeChildNode)) {
           nodeChildren.add(callTreeChildNode);
         }
       }
@@ -275,9 +302,8 @@ public class CodeGraphApp {
           allClassMethodVisitsByMethodReference.putIfAbsent(
               childVisitResult.getKey(), childVisitResult.getValue());
         }
-      }
-      else {
-          log.debug("Class [{}] has already been visited.", classExternalName);
+      } else {
+        log.debug("Class [{}] has already been visited.", classExternalName);
       }
     }
     return new MethodsAnalysis(null, allClassMethodVisitsByMethodReference);
