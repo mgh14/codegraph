@@ -95,42 +95,47 @@ public class CodeGraphApp {
         String.format(
             "Finished analysis of class [%s]. Outputting method graphs...", analyzedClassName));
     for (CallTreeNodeDetail methodGraph : analyzedClassGraphs.values()) {
-      outputGraph(methodGraph, 0);
+      String graphOutput = outputGraph(methodGraph, 0);
+      log.info(graphOutput);
     }
     int x = 5; // TODO: temporary stopping point for debugging; needs removed
   }
 
-    private static Class<?> loadClass(String pathToJar, String fullClassName)
-            throws MalformedURLException, ClassNotFoundException {
-        File file = new File(pathToJar);
+  private static Class<?> loadClass(String pathToJar, String fullClassName)
+      throws MalformedURLException, ClassNotFoundException {
+    File file = new File(pathToJar);
 
-        URL url = file.toURI().toURL();
-        URL[] urls = new URL[] {url};
+    URL url = file.toURI().toURL();
+    URL[] urls = new URL[] {url};
 
-        ClassLoader cl = new URLClassLoader(urls);
-        return cl.loadClass(fullClassName);
-    }
+    ClassLoader cl = new URLClassLoader(urls);
+    return cl.loadClass(fullClassName);
+  }
 
-  private static void outputGraph(CallTreeNodeDetail node, int level) {
+  private static String outputGraph(CallTreeNodeDetail node, int level) {
     String methodRefName =
-        node.getOwner()
+        node.getThisMethodReference().getParentClass()
             + "#"
             + node.getThisMethodReference().getName()
+            + node.getThisMethodReference().getDesc()
             + String.format(
                 " (method hash: %s, children = %d)",
                 node.getThisMethodReference().hashCode(), node.getChildren().size());
+    StringBuilder builder = new StringBuilder();
     if (level == 0) {
-      log.info("Root Method: " + methodRefName);
+      builder.append("Root Method: ").append(methodRefName);
     } else {
       String indent =
           IntStream.rangeClosed(0, level)
               .mapToObj(i -> "\t")
               .collect(Collectors.joining(StringUtils.EMPTY));
+      builder.append(indent).append("NR: ").append(methodRefName);
       log.info(indent + "NR: " + methodRefName);
     }
     for (CallTreeNodeDetail child : node.getChildren()) {
-      outputGraph(child, level + 1);
+      builder.append(outputGraph(child, level + 1));
     }
+    return builder.toString();
   }
 
   @Value
