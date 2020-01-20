@@ -3,6 +3,7 @@ package com.mgh14.codegraph;
 import com.mgh14.codegraph.filter.CompositeFilter;
 import com.mgh14.codegraph.filter.Filter;
 import com.mgh14.codegraph.filter.NonObjectFilter;
+import lombok.Data;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ClassUtils;
@@ -30,20 +31,17 @@ public class CodeGraphApp {
   public static final int ASM_VERSION = ASM7;
   private static Map<Class<?>, Exception> errors = new HashMap<>();
 
-  public static void main(String[] args) throws Exception {
-    Class<?> classToAnalyze = loadClass(args[1], args[2]);
-    Map<String, CallTreeNodeDetail> allCallGraphsOneChildDeep =
-        getAllCallGraphsOneChildDeep(classToAnalyze);
-    // now we need to piece together all the call graphs that are only one child deep right now:
+  public static Map<String, CallTreeNode> pieceTogetherCallGraphs(
+      Map<String, CallTreeNode> allCallGraphsOneChildDeep) {
     Set<String> unprocessedNodeKeys = new HashSet<>(allCallGraphsOneChildDeep.keySet());
-    Collection<CallTreeNodeDetail> allRefs = allCallGraphsOneChildDeep.values();
+    Collection<CallTreeNode> allRefs = allCallGraphsOneChildDeep.values();
     Set<String> leafCallTreeNodeKeys =
         allCallGraphsOneChildDeep.entrySet().stream()
             .filter(entry -> entry.getValue().getChildren().isEmpty())
             .map(Map.Entry::getKey)
             .collect(Collectors.toSet());
     for (String callTreeNodeKey : leafCallTreeNodeKeys) {
-      CallTreeNodeDetail currentLeafNode = allCallGraphsOneChildDeep.get(callTreeNodeKey);
+      CallTreeNode currentLeafNode = allCallGraphsOneChildDeep.get(callTreeNodeKey);
       MethodReference mr = currentLeafNode.getReferenceToMethodThatCallsThisMethod();
       if (Objects.isNull(mr)) {
         // this is both a leaf node and the root of a graph that calls no other methods in the
@@ -51,7 +49,7 @@ public class CodeGraphApp {
         unprocessedNodeKeys.remove(currentLeafNode.getThisMethodReference().toString());
         continue;
       }
-      Set<CallTreeNodeDetail> nodesWithMethodRefMatchingLeafReferringMethodInstruction =
+      Set<CallTreeNode> nodesWithMethodRefMatchingLeafReferringMethodInstruction =
           allRefs.stream()
               .filter(ref -> ref.getThisMethodReference().equals(mr))
               .collect(Collectors.toSet());
@@ -59,12 +57,12 @@ public class CodeGraphApp {
         throw new RuntimeException(
             "Illegal state! No single call tree node found for method ref {" + mr + "}");
       }
-      CallTreeNodeDetail nodeCallingLeafViaMethodInstructionReference =
+      CallTreeNode nodeCallingLeafViaMethodInstructionReference =
           nodesWithMethodRefMatchingLeafReferringMethodInstruction.iterator().next();
       if (nodeCallingLeafViaMethodInstructionReference
           .getThisMethodReference()
           .equals(currentLeafNode.getThisMethodReference())) {
-        CallTreeNodeDetail circularNodeReference =
+        CallTreeNode circularNodeReference =
             new CallTreeNodeDetail(
                 currentLeafNode.getOwner(),
                 currentLeafNode.getReferenceToMethodThatCallsThisMethod(),
@@ -81,8 +79,18 @@ public class CodeGraphApp {
       }
     }
 
+    return allCallGraphsOneChildDeep;
+  }
+
+  public static void main(String[] args) throws Exception {
+    Class<?> classToAnalyze = loadClass(args[1], args[2]);
+    Map<String, CallTreeNode> allCallGraphsOneChildDeep =
+        getAllCallGraphsOneChildDeep(classToAnalyze);
+    // now we need to piece together all the call graphs that are only one child deep right now:
+    pieceTogetherCallGraphs(allCallGraphsOneChildDeep);
+
     String analyzedClassName = getInternalNameWithoutClass(classToAnalyze);
-    Map<String, CallTreeNodeDetail> analyzedClassGraphs =
+    Map<String, CallTreeNode> analyzedClassGraphs =
         allCallGraphsOneChildDeep.entrySet().stream()
             .filter(
                 ref ->
@@ -94,7 +102,7 @@ public class CodeGraphApp {
     log.info(
         String.format(
             "Finished analysis of class [%s]. Outputting method graphs...", analyzedClassName));
-    for (CallTreeNodeDetail methodGraph : analyzedClassGraphs.values()) {
+    for (CallTreeNode methodGraph : analyzedClassGraphs.values()) {
       String graphOutput = outputGraph(methodGraph, 0);
       log.info(graphOutput);
     }
@@ -112,7 +120,7 @@ public class CodeGraphApp {
     return cl.loadClass(fullClassName);
   }
 
-  private static String outputGraph(CallTreeNodeDetail node, int level) {
+  private static String outputGraph(CallTreeNode node, int level) {
     String methodRefName =
         node.getThisMethodReference().getParentClass()
             + "#"
@@ -132,25 +140,90 @@ public class CodeGraphApp {
       builder.append(indent).append("NR: ").append(methodRefName);
       log.info(indent + "NR: " + methodRefName);
     }
-    for (CallTreeNodeDetail child : node.getChildren()) {
+    for (CallTreeNode child : node.getChildren()) {
       builder.append(outputGraph(child, level + 1));
     }
     return builder.toString();
   }
 
-  @Value
-  public static class CallTreeNodeDetail {
-    String owner;
-    MethodReference referenceToMethodThatCallsThisMethod;
-    MethodInstructionReference referringMethodInstruction;
-    List<CallTreeNodeDetail> children;
-    MethodReference thisMethodReference;
+  @Data
+  abstract static class CallTreeNode {
+    protected final String owner;
+    protected final MethodReference referenceToMethodThatCallsThisMethod;
+    protected final MethodInstructionReference referringMethodInstruction;
+    protected final List<CallTreeNode> children;
+    protected final MethodReference thisMethodReference;
+
+    public CallTreeNode(
+        String owner,
+        MethodReference referenceToMethodThatCallsThisMethod,
+        MethodInstructionReference referringMethodInstruction,
+        List<CallTreeNode> children,
+        MethodReference thisMethodReference) {
+      this.owner = owner;
+      this.referenceToMethodThatCallsThisMethod = referenceToMethodThatCallsThisMethod;
+      this.referringMethodInstruction = referringMethodInstruction;
+      this.children = children;
+      this.thisMethodReference = thisMethodReference;
+    }
+
+    public List<CallTreeNode> getChildren() {
+      return children;
+    }
+
+    public MethodReference getThisMethodReference() {
+      return thisMethodReference;
+    }
+
+    public String getOwner() {
+      return owner;
+    }
+
+    public MethodReference getReferenceToMethodThatCallsThisMethod() {
+      return referenceToMethodThatCallsThisMethod;
+    }
+
+    public MethodInstructionReference getReferringMethodInstruction() {
+      return referringMethodInstruction;
+    }
+  }
+
+  public static class CallTreeNodeDetail extends CallTreeNode {
+    public CallTreeNodeDetail(
+        String owner,
+        MethodReference referenceToMethodThatCallsThisMethod,
+        MethodInstructionReference referringMethodInstruction,
+        List<CallTreeNode> children,
+        MethodReference thisMethodReference) {
+      super(
+          owner,
+          referenceToMethodThatCallsThisMethod,
+          referringMethodInstruction,
+          children,
+          thisMethodReference);
+    }
+  }
+
+  public static class UnvisitedCallTreeNodeDetail extends CallTreeNode {
+    public UnvisitedCallTreeNodeDetail(
+        String owner,
+        MethodReference referenceToMethodThatCallsThisMethod,
+        MethodInstructionReference referringMethodInstruction,
+        List<CallTreeNode> children,
+        MethodReference thisMethodReference) {
+      super(
+          owner,
+          referenceToMethodThatCallsThisMethod,
+          referringMethodInstruction,
+          children,
+          thisMethodReference);
+    }
   }
 
   // TODO: this method is not complete. Right now it only gathers the children for the root method
   // references.
   // TODO: not private right now so it can be testable
-  static Map<String, CallTreeNodeDetail> getAllCallGraphsOneChildDeep(Class<?> clazz)
+  static Map<String, CallTreeNode> getAllCallGraphsOneChildDeep(Class<?> clazz)
       throws ClassNotFoundException {
     Map<MethodReference, List<MethodInstructionReference>> analysisResult =
         analyzeMethodRefs(clazz).getAllMethodRefs();
@@ -174,7 +247,7 @@ public class CodeGraphApp {
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))));
 
     String internalClassName = getInternalNameWithoutClass(clazz);
-    Map<MethodReference, CallTreeNodeDetail> startingFromAnyMethodCallTree = new HashMap<>();
+    Map<MethodReference, CallTreeNode> startingFromAnyMethodCallTree = new HashMap<>();
     Map<MethodReference, List<MethodInstructionReference>> chosenClassMethods =
         methodRefsByClass.get(internalClassName);
     // For each root-level method in the analyzed class:
@@ -185,8 +258,8 @@ public class CodeGraphApp {
       if (!startingFromAnyMethodCallTree.containsKey(parentMethodReference)) {
         // Since this is a root node (i.e. a method in the targeted/analyzed class), there is no
         // parent method and thus no method instruction. This is one of the class "entry points"
-        CallTreeNodeDetail analyzedMethodEntryPoint =
-            new CallTreeNodeDetail(
+        CallTreeNode analyzedMethodEntryPoint =
+            new UnvisitedCallTreeNodeDetail(
                 internalClassName, null, null, new ArrayList<>(), parentMethodReference);
         startingFromAnyMethodCallTree.put(parentMethodReference, analyzedMethodEntryPoint);
       }
@@ -219,9 +292,9 @@ public class CodeGraphApp {
                   childMethodRef));
         }
 
-        CallTreeNodeDetail callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
-        CallTreeNodeDetail callTreeChildNode = startingFromAnyMethodCallTree.get(childMethodRef);
-        List<CallTreeNodeDetail> nodeChildren = callTreeNode.getChildren();
+        CallTreeNode callTreeNode = startingFromAnyMethodCallTree.get(parentMethodReference);
+        CallTreeNode callTreeChildNode = startingFromAnyMethodCallTree.get(childMethodRef);
+        List<CallTreeNode> nodeChildren = callTreeNode.getChildren();
         if (!childMethodRef.equals(parentMethodReference)
             && !nodeChildren.contains(callTreeChildNode)) {
           nodeChildren.add(callTreeChildNode);
@@ -229,7 +302,7 @@ public class CodeGraphApp {
       }
     }
 
-    Map<String, CallTreeNodeDetail> transformedStartingFromAnyMethodCallTree =
+    Map<String, CallTreeNode> transformedStartingFromAnyMethodCallTree =
         startingFromAnyMethodCallTree.keySet().stream()
             .collect(
                 Collectors.toMap(MethodReference::toString, startingFromAnyMethodCallTree::get));
